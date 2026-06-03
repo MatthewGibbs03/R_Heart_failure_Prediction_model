@@ -1,0 +1,472 @@
+---
+title: "Heart Failure Pred"
+output: html_document
+date: "2026-04-23"
+---
+```{r}
+# Load and explore data
+library(readr)
+library(dplyr)
+library(broom)
+library(knitr)
+library(kableExtra)
+library(tableone)
+library(tidyverse)
+library(caret)   
+library(pROC)
+library(ResourceSelection)
+library(ggplot2)
+library(MASS)
+library(lmtest)
+
+```
+
+```{r}
+#Data overview and conversion
+HF_DS <- read.csv('heart_failure.csv')
+
+summary(HF_DS) #Summary stats
+
+# Convert outcome to factor 
+HF_DS$heart_failure <- factor(HF_DS$heart_failure, 
+                               levels = c(0, 1), 
+                               labels = c('Absent', 'Present')) #Convert 0/1 to Absent/Present
+
+HF_DS$sex_male <- factor(HF_DS$sex_male, 
+                               levels = c(0, 1), 
+                               labels = c('Female', 'Male')) #Convert 0/1 to Female/Male
+
+HF_DS$smoking <- factor(HF_DS$smoking, 
+                               levels = c(0, 1), 
+                               labels = c('No', 'yes')) #Convert 0/1 to No/Yes
+
+HF_DS$diabetes <- factor(HF_DS$diabetes, 
+                               levels = c(0, 1), 
+                               labels = c('No', 'yes')) #Convert 0/1 to No/Yes
+
+HF_DS$hypertension <- factor(HF_DS$hypertension, 
+                               levels = c(0, 1), 
+                               labels = c('No', 'yes')) #Convert 0/1 to No/Yes
+
+HF_DS$anaemia <- factor(HF_DS$anaemia, 
+                               levels = c(0, 1), 
+                               labels = c('No', 'yes')) #Convert 0/1 to No/Yes
+
+HF_DS$prior_mi <- factor(HF_DS$prior_mi, 
+                               levels = c(0, 1), 
+                               labels = c('No', 'yes')) #Convert 0/1 to No/Yes
+
+HF_DS$atrial_fibrillation <- factor(HF_DS$atrial_fibrillation, 
+                               levels = c(0, 1), 
+                               labels = c('No', 'yes')) #Convert 0/1 to No/Yes
+
+HF_DS$med_acei <- factor(HF_DS$med_acei, 
+                               levels = c(0, 1), 
+                               labels = c('No', 'yes')) #Convert 0/1 to No/Yes
+
+HF_DS$med_beta_blocker <- factor(HF_DS$med_beta_blocker, 
+                               levels = c(0, 1), 
+                               labels = c('No', 'yes')) #Convert 0/1 to No/Yes
+
+HF_DS$med_diuretic <- factor(HF_DS$med_diuretic, 
+                               levels = c(0, 1), 
+                               labels = c('No', 'yes')) #Convert 0/1 to No/Yes
+
+head(HF_DS)
+
+#Get gender count:
+Gender <- HF_DS %>%
+  group_by(sex_male) %>%
+  summarise(total = n(), .groups = 'drop')
+
+Gender
+
+#Get heart failure count:
+HF <- HF_DS %>%
+  group_by(heart_failure) %>%
+  summarise(total = n(), .groups = 'drop')
+
+HF
+```
+
+
+```{r}
+#Exploratory analysis
+
+#Create all variables
+vars <- c('age', 'sex_male', 'bmi', 'heart_rate', 'systolic_bp', 'diastolic_bp', 
+          'ejection_fraction', 'ntprobnp_pg_ml', 'serum_creatinine_mg_dl', 
+          'eGFR_ckdepi', 'smoking', 'diabetes', 'hypertension', 'anaemia', 
+          'prior_mi', 'atrial_fibrillation', 'med_acei', 'med_beta_blocker', 
+          'med_diuretic')
+
+catVars <- c('sex_male', 'smoking', 'diabetes', 'hypertension', 'anaemia', 
+             'prior_mi', 'atrial_fibrillation', 'med_acei', 'med_beta_blocker', 
+             'med_diuretic') #Create categorical variables for table 1
+
+#Create table 1 stratified by heart failure for baseline characteristics
+table1 <- CreateTableOne(vars = vars, strata = 'heart_failure', data = HF_DS,
+                         factorVars = catVars)
+print(table1, showAllLevels = TRUE, formatOptions = list(big.mark = ','))
+```
+
+
+
+```{r}
+#Create continous variables
+continuous_vars <- c('age', 'bmi', 'heart_rate', 'systolic_bp', 'diastolic_bp', 
+                     'ejection_fraction', 'ntprobnp_pg_ml', 'serum_creatinine_mg_dl', 
+                     'eGFR_ckdepi')
+
+#Check outliers using boxplots
+for(var in continuous_vars) {
+  boxplot(HF_DS[[var]] ~ HF_DS$heart_failure, 
+          main = paste(var, 'by Heart Failure'),
+          xlab = 'Heart Failure', ylab = var)
+}
+```
+
+
+```{r}
+#Check outliers through interquartile range (IQR) 
+identify_outliers <- function(x) {
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  sum(x < lower_bound | x > upper_bound, na.rm = TRUE)
+}
+
+#Get otlier counts
+outlier_counts <- sapply(HF_DS[continuous_vars], identify_outliers)
+print('Number of outliers per variable:')
+print(outlier_counts)
+```
+
+
+```{r}
+#Check normality through histograms
+for(var in continuous_vars) {
+  hist(HF_DS[[var]], main = paste('Histogram of', var), 
+       xlab = var, col = 'lightblue')
+}
+```
+
+
+
+```{r}
+#Categorising variables
+#Continous variables into categorical variables
+HF_DS <- HF_DS %>%
+  mutate(
+    # Age categories
+    age_cat = case_when(
+      age < 50 ~ 'Under 50',
+      age >= 50 & age < 65 ~ '50-64',
+      age >= 65 & age < 75 ~ '65-74',
+      age >= 75 ~ '75+'
+    ),
+    #BMI categories
+    bmi_cat = case_when(
+      bmi < 18.5 ~ 'Underweight',
+      bmi >= 18.5 & bmi < 25 ~ 'Normal',
+      bmi >= 25 & bmi < 30 ~ 'Overweight',
+      bmi >= 30 ~ 'Obese'
+    ),
+    #EF categories
+    ef_cat = case_when(
+      ejection_fraction < 40 ~ 'HFrEF (Reduced)',
+      ejection_fraction >= 40 & ejection_fraction < 50 ~ 'HFmrEF (Mid-range)',
+      ejection_fraction >= 50 ~ 'HFpEF (Preserved)'
+    ),
+    #NT-proBNP categoires
+    ntprobnp_cat = case_when(
+      ntprobnp_pg_ml < 125 ~ 'Normal',
+      ntprobnp_pg_ml >= 125 & ntprobnp_pg_ml < 450 ~ 'Elevated (age < 75)',
+      ntprobnp_pg_ml >= 450 ~ 'Elevated'
+    ),
+    #eGFR categories
+    eGFR_cat = case_when(
+      eGFR_ckdepi >= 90 ~ 'Stage 1 - Normal',
+      eGFR_ckdepi >= 60 & eGFR_ckdepi < 90 ~ 'Stage 2 - Mild loss',
+      eGFR_ckdepi >= 45 & eGFR_ckdepi < 60 ~ 'Stage 3 - Mild to moderate loss',
+      eGFR_ckdepi >= 30 & eGFR_ckdepi < 45 ~ 'Stage 4 - Moderate to severe loss',
+      eGFR_ckdepi < 30 ~ 'Stage 5 - Severe loss'
+    )
+  )
+
+#Check  distributions
+table(HF_DS$age_cat, HF_DS$heart_failure)
+table(HF_DS$bmi_cat, HF_DS$heart_failure)
+table(HF_DS$ef_cat, HF_DS$heart_failure)
+table(HF_DS$ntprobnp_cat, HF_DS$heart_failure)
+table(HF_DS$eGFR_cat, HF_DS$heart_failure)
+
+```
+
+```{r}
+
+# Split data into training set and test set (80/20)
+set.seed(327489)
+HF_DS <- HF_DS %>%
+  mutate(rvar = runif(n())) %>%
+  arrange(rvar) %>%
+  mutate(S = if_else(row_number() > n() * 0.8, 1, 0))
+
+train_data <- HF_DS %>% filter(S == 0)
+test_data <- HF_DS %>% filter(S == 1)
+```
+
+
+```{r}
+#Compare categorical vs. continous variables
+
+#Age
+
+chisq.test(table(train_data$age_cat, train_data$heart_failure))
+
+model_age_con <- glm(heart_failure ~ age, 
+                          data = train_data, 
+                          family = binomial())
+  
+model_age_cat <- glm(heart_failure ~ age_cat, 
+                           data = train_data, 
+                           family = binomial())
+  
+lrtest(model_age_con, model_age_cat)
+
+#BMI
+
+chisq.test(table(train_data$bmi_cat, train_data$heart_failure))
+
+model_bmi_con <- glm(heart_failure ~ bmi, 
+                        data = train_data, 
+                        family = binomial())
+
+model_bmi_cat <- glm(heart_failure ~ bmi_cat, 
+                         data = train_data, 
+                         family = binomial())
+
+lrtest(model_bmi_con, model_bmi_cat)
+
+#EF
+
+chisq.test(table(train_data$ef_cat, train_data$heart_failure))
+
+model_ef_con <- glm(heart_failure ~ ejection_fraction, 
+                        data = train_data, 
+                        family = binomial())
+
+model_ef_cat <- glm(heart_failure ~ ef_cat, 
+                         data = train_data, 
+                         family = binomial())
+
+lrtest(model_ef_con, model_ef_cat)
+
+#ntprobnp_pg_ml
+
+chisq.test(table(train_data$ntprobnp_cat, train_data$heart_failure))
+
+model_ntpro_con <- glm(heart_failure ~ ntprobnp_pg_ml, 
+                        data = train_data, 
+                        family = binomial())
+
+model_ntpro_cat <- glm(heart_failure ~ ntprobnp_cat, 
+                         data = train_data, 
+                         family = binomial())
+
+lrtest(model_ntpro_con, model_ntpro_cat)
+
+#eGRF
+
+chisq.test(table(train_data$eGFR_cat, train_data$heart_failure))
+
+model_eGFR_con <- glm(heart_failure ~ eGFR_ckdepi, 
+                        data = train_data, 
+                        family = binomial())
+
+model_eGFR_cat <- glm(heart_failure ~ eGFR_cat, 
+                         data = train_data, 
+                         family = binomial())
+
+
+lrtest(model_eGFR_con, model_eGFR_cat)
+```
+
+
+```{r}
+train_data_scaled <- train_data %>%
+  mutate(across(where(is.numeric), scale))
+
+#Refit model with scaled
+model_scaled <- glm(heart_failure ~ age + sex_male + bmi + heart_rate + 
+                    systolic_bp + ejection_fraction + ntprobnp_pg_ml +
+                    serum_creatinine_mg_dl,
+                    data = train_data_scaled,
+                    family = binomial())
+
+#Confidence intervals
+importance_scaled <- tidy(model_scaled) %>%
+  filter(term != '(Intercept)') %>%
+  arrange(desc(abs(estimate)))
+print(importance_scaled)
+```
+
+```{r}
+#Create logistic regression full model
+full_model <- glm(heart_failure ~ age + sex_male + bmi + heart_rate + 
+                  systolic_bp + diastolic_bp + ejection_fraction + 
+                  ntprobnp_pg_ml + serum_creatinine_mg_dl + eGFR_ckdepi +
+                  smoking + diabetes + hypertension + anaemia + prior_mi + 
+                  atrial_fibrillation + med_acei + med_beta_blocker + med_diuretic,
+                  data = train_data,
+                  family = binomial())
+
+#Summary stats for full model
+summary(full_model)
+```
+
+```{r}
+#Stepwise selection AIC
+step_model <- stepAIC(full_model, direction = 'both', trace = FALSE)
+summary(step_model)
+
+#Odds ratios
+tidy(step_model, exponentiate = TRUE, conf.int = TRUE)
+```
+
+
+```{r}
+#5-fold cross validation 
+ctrl <- trainControl(method = 'cv', number = 5, classProbs = TRUE, 
+                     summaryFunction = twoClassSummary) #Get sensitivity, specificity, and ROC
+
+#Train model
+cv_model <- train(heart_failure ~ ejection_fraction + ntprobnp_pg_ml + age + eGFR_ckdepi + sex_male,
+                  data = train_data,
+                  method = 'glm',
+                  family = 'binomial',
+                  trControl = ctrl,
+                  metric = 'ROC')
+print(cv_model$results)
+```
+
+
+```{r}
+#Sensitivity analysis
+#Bootstrap AUC - Refit model on 100 bootstrap and calculate AUC 
+set.seed(123)
+boot_auc <- replicate(100, {
+  idx <- sample(1:nrow(train_data), replace = TRUE)
+  boot_fit <- glm(heart_failure ~ ejection_fraction + ntprobnp_pg_ml + age,
+                  data = train_data[idx, ], family = binomial())
+  pred <- predict(boot_fit, newdata = train_data[-idx, ], type = 'response')
+  auc(roc(train_data$heart_failure[-idx], pred))
+})
+cat('Bootstrap 95% CI for AUC:', quantile(boot_auc, c(0.025, 0.975)), '\n')
+
+#Subgroup analysis stratified by age
+train_data$age_65 <- ifelse(train_data$age >= 65, '65+', '<65') #Create categories
+model_young <- glm(heart_failure ~ ejection_fraction + ntprobnp_pg_ml,
+                   data = train_data[train_data$age_65 == '<65', ], family = binomial())
+model_old   <- glm(heart_failure ~ ejection_fraction + ntprobnp_pg_ml,
+                   data = train_data[train_data$age_65 == '65+', ], family = binomial())
+
+train_data %>%
+  count(age_65) #Count subgroup sizes
+```
+
+
+```{r}
+# Compare odds ratios for subgroup analysis through odds ratios
+tidy(model_young, exponentiate = TRUE)
+tidy(model_old, exponentiate = TRUE)
+```
+
+
+
+```{r}
+#Create final model on training data
+final_model <- glm(heart_failure ~ age + ejection_fraction + ntprobnp_pg_ml + 
+                   eGFR_ckdepi + atrial_fibrillation + sex_male,
+                   data = train_data,
+                   family = binomial())
+test_data$pred <- predict(final_model, newdata = test_data, type = 'response') #Predicted probabilities on test test
+
+#ROC and AUC curve
+library(pROC)
+test_roc <- roc(test_data$heart_failure, test_data$pred)
+auc_val <- auc(test_roc)
+cat('Test set AUC:', round(auc_val, 3), '\n')
+
+#Youden's index to get optimal thresholds
+opt_thresh <- coords(test_roc, 'best', ret = 'threshold')$threshold
+pred_class <- factor(ifelse(test_data$pred > opt_thresh, 'Yes', 'No'), 
+                     levels = c('No', 'Yes'))
+
+
+
+#Convert heart failure labels to yes / no for confusion matrix
+actual <- ifelse(test_data$heart_failure %in% c('Yes', 'Present'), 'Yes', 'No')
+
+# Create predicted class
+pred_class <- ifelse(test_data$pred > opt_thresh, 'Yes', 'No')
+
+
+# Confusion matrix
+cm <- confusionMatrix(data = factor(pred_class), 
+                      reference = factor(actual), 
+                      positive = 'Yes')
+print(cm)
+
+#Calibration plot (obsereved v predicted)
+cal_data <- test_data %>%
+  mutate(pred_decile = ntile(pred, 10)) %>%
+  group_by(pred_decile) %>%
+  summarise(observed = mean(heart_failure == 'Present'),
+            predicted = mean(pred), .groups = 'drop')
+ggplot(cal_data, aes(x = predicted, y = observed)) +
+  geom_point(size = 3) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed', color = 'red') +
+  labs(title = 'Calibration Plot (Test Set)', x = 'Predicted Probability', y = 'Observed Proportion') +
+  theme_minimal()
+```
+
+```{r}
+#Hosmer Lemeshow goodness of fit test
+#Test if predicted probabilities match observed event rates
+hl_test <- hoslem.test(as.numeric(test_data$heart_failure) - 1, test_data$pred, g = 10)
+print(hl_test)
+```
+
+```{r}
+#Cross-validation results for AUC, sensitivity, specificity, from 5-fold
+print(cv_model$results)
+```
+
+
+
+```{r}
+#ROC curve
+plot(test_roc, main = paste('ROC Curve (AUC =', round(auc_val, 3), ')'))
+
+#Final OR table
+final_odds <- tidy(final_model, exponentiate = TRUE, conf.int = TRUE) %>%
+  filter(term != '(Intercept)') %>%
+  mutate(across(where(is.numeric), ~ round(., 3)))
+print(final_odds)
+
+#Cross validation table
+cv_results <- cv_model$results %>%
+  dplyr::select(ROC, Sens, Spec, ROCSD, SensSD, SpecSD) %>%
+  mutate(across(where(is.numeric), ~ round(., 3)))
+print(cv_results)
+```
+
+```{r}
+#NT-proBNP expanded coefficients
+summary(final_model)$coefficients['ntprobnp_pg_ml', ]
+exp(coef(final_model))['ntprobnp_pg_ml']
+exp(confint(final_model))['ntprobnp_pg_ml', ]
+```
