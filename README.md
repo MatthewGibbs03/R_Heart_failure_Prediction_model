@@ -26,6 +26,7 @@ Variable selection was performed using bidirectional stepwise AIC on the trainin
 Five-fold cross-validation was used to assess model stability. Calibration was evaluated using the Hosmer-Lemeshow test. 
 Bootstrap resampling (100 iterations) was used to calculate confidence intervals for the AUC. Subgroup analysis stratified by age (under 65 vs 65 and over)was conducted to test whether predictor effects differed by age group.
 
+# Visuals
 ![screenshot](Image/MV-Regression.png)
 
 ![screenshot](Image/Baseline-char.png)
