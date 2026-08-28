@@ -27,7 +27,11 @@ Five-fold cross-validation was used to assess model stability. Calibration was e
 Bootstrap resampling (100 iterations) was used to calculate confidence intervals for the AUC. Subgroup analysis stratified by age (under 65 vs 65 and over)was conducted to test whether predictor effects differed by age group.
 
 ![screenshot](Image/MV-Regression.png)
+
 ![screenshot](Image/Baseline-char.png)
+
 ![screenshot](Image/Calibration-plot.png)
+
+#### Cross-validation
 ![screenshot](Image/Cross-Validation)
 
