@@ -25,3 +25,5 @@ Logistic regression was used because the outcome is binary (heart failure presen
 Variable selection was performed using bidirectional stepwise AIC on the training data. The final model included six predictors: age, ejection fraction, NT-proBNP, eGFR, sex, and atrial fibrillation. 
 Five-fold cross-validation was used to assess model stability. Calibration was evaluated using the Hosmer-Lemeshow test. 
 Bootstrap resampling (100 iterations) was used to calculate confidence intervals for the AUC. Subgroup analysis stratified by age (under 65 vs 65 and over)was conducted to test whether predictor effects differed by age group.
+
+![screenshot](visualisation:/Calibration-plot.png)
