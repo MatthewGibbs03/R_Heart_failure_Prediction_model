@@ -1,7 +1,7 @@
 # Summary
-A logistic regression model predicting heart failure risk from clinical data (N = 700). 
-Older age, lower ejection fraction, and higher NT-proBNP were the strongest predictors. 
-The model achieved an AUC of 0.75 with good calibration (Hosmer-Lemeshow p = .876).
+- A logistic regression model predicting heart failure risk from clinical data (N = 700). 
+- Older age, lower ejection fraction, and higher NT-proBNP were the strongest predictors. 
+- The model achieved moderate discrimination (AUC = 0.75) with good calibration (Hosmer-Lemeshow p = .876).
 
 # Results
 
@@ -20,11 +20,11 @@ Final model odds ratios:
 - Atrial fibrillation: OR = 2.91 (95% CI: 0.82 - 11.60), p = .110
 
 # Methods
-Data was split into training (80%, n = 560) and testing (20%, n = 140) sets. 
-Logistic regression was used because the outcome is binary (heart failure present or absent). 
-Variable selection was performed using bidirectional stepwise AIC on the training data. The final model included six predictors: age, ejection fraction, NT-proBNP, eGFR, sex, and atrial fibrillation. 
-Five-fold cross-validation was used to assess model stability. Calibration was evaluated using the Hosmer-Lemeshow test. 
-Bootstrap resampling (100 iterations) was used to calculate confidence intervals for the AUC. Subgroup analysis stratified by age (under 65 vs 65 and over)was conducted to test whether predictor effects differed by age group.
+- Data was split into training (80%, n = 560) and testing (20%, n = 140) sets. 
+- Logistic regression was used because the outcome is binary (heart failure present or absent). 
+- Variable selection was performed using bidirectional stepwise AIC on the training data. The final model included six predictors: age, ejection fraction, NT-proBNP, eGFR, sex, and atrial fibrillation. 
+- Five-fold cross-validation was used to assess model stability.
+- Bootstrap resampling (100 iterations) was used to calculate confidence intervals for the AUC. Subgroup analysis stratified by age (under 65 vs 65 and over)was conducted to test whether predictor effects differed by age group.
 
 # Visuals
 ![screenshot](Image/MV-Regression.png)
